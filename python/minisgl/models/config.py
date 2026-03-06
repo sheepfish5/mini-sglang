@@ -32,6 +32,11 @@ class ModelConfig:
     num_experts_per_tok: int
     moe_intermediate_size: int
     norm_topk_prob: bool
+    use_qk_norm: bool
+    interleave_moe_layer_step: int
+    attn_temperature_tuning: bool
+    floor_scale: int
+    attn_scale: float
     model_type: str
     architectures: list[str]
 
@@ -41,6 +46,13 @@ class ModelConfig:
 
     @classmethod
     def from_hf(cls, config: PretrainedConfig) -> ModelConfig:
+        if hasattr(config, "text_config") and config.text_config is not None:
+            top = config
+            config = config.text_config
+            for attr in ("architectures", "rope_theta", "rope_scaling"):
+                if not getattr(config, attr, None) and getattr(top, attr, None):
+                    setattr(config, attr, getattr(top, attr))
+
         num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
@@ -50,6 +62,13 @@ class ModelConfig:
         moe_intermediate_size = getattr(config, "moe_intermediate_size", 0)
         norm_topk_prob = getattr(config, "norm_topk_prob", False)
         architectures = getattr(config, "architectures", ["LlamaForCausalLM"])
+
+        # Llama 4 Only
+        use_qk_norm = getattr(config, "use_qk_norm", False)
+        interleave_moe_layer_step = getattr(config, "interleave_moe_layer_step", 1)
+        attn_temperature_tuning = getattr(config, "attn_temperature_tuning", False)
+        floor_scale = getattr(config, "floor_scale", 8192)
+        attn_scale = getattr(config, "attn_scale", 0.1)
 
         return cls(
             num_layers=config.num_hidden_layers,
@@ -75,4 +94,9 @@ class ModelConfig:
             norm_topk_prob=norm_topk_prob,
             model_type=model_type,
             architectures=architectures,
+            use_qk_norm=use_qk_norm,
+            interleave_moe_layer_step=interleave_moe_layer_step,
+            attn_temperature_tuning=attn_temperature_tuning,
+            floor_scale=floor_scale,
+            attn_scale=attn_scale,
         )
