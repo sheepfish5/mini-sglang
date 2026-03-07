@@ -69,16 +69,21 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
         load_device = "cpu" if tp else device_str
         with safetensors.safe_open(file, framework="pt", device=load_device) as f:
             for name in f.keys():
+                # Strip multimodal wrapper prefix, skip vision/projector weights
+                if name.startswith(("vision_model.", "multi_modal_projector.")):
+                    continue
                 raw = f.get_tensor(name)
                 tensor = _shard_tensor(name, raw, r, n).to(device) if tp else raw
                 del raw
 
                 info = _get_merge_info(name)
                 if info is None:
-                    yield name, tensor
+                    key = name.removeprefix("language_model.")
+                    yield key, tensor
                     continue
 
                 merged_key, slot, all_slots = info
+                merged_key = merged_key.removeprefix("language_model.")
                 merge_buf.setdefault(merged_key, {})[slot] = tensor
                 if all(s in merge_buf[merged_key] for s in all_slots):
                     parts = [merge_buf[merged_key][s] for s in all_slots]
