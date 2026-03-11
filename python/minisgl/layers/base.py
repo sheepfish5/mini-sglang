@@ -86,7 +86,9 @@ class BaseOP:
                             f"No weights found in state_dict for {prefix} and {mapped_name}"
                         )
 
-                    item = torch.stack(items, dim=0)
+                    item = torch.stack(items, dim=0) if len(items) > 1 else items
+                    if hasattr(param, "post_process"):
+                        item = param.post_process(item)
                 else:
                     item = state_dict.pop(_concat_prefix(prefix, name))
 

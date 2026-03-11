@@ -37,6 +37,7 @@ class ModelConfig:
     attn_temperature_tuning: bool
     floor_scale: int
     attn_scale: float
+    intermediate_size_mlp: int | None
     model_type: str
     architectures: list[str]
 
@@ -69,6 +70,7 @@ class ModelConfig:
         attn_temperature_tuning = getattr(config, "attn_temperature_tuning", False)
         floor_scale = getattr(config, "floor_scale", 8192)
         attn_scale = getattr(config, "attn_scale", 0.1)
+        intermediate_size_mlp = getattr(config, "intermediate_size_mlp", None)
 
         return cls(
             num_layers=config.num_hidden_layers,
@@ -99,4 +101,5 @@ class ModelConfig:
             attn_temperature_tuning=attn_temperature_tuning,
             floor_scale=floor_scale,
             attn_scale=attn_scale,
+            intermediate_size_mlp=intermediate_size_mlp,
         )
