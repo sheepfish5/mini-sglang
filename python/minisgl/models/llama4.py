@@ -156,7 +156,7 @@ class Llama4DecoderLayer(BaseOP):
         if self.is_moe_layer:
             self.feed_forward = Llama4MoE(config)
         else:
-            self.feed_forward = Llama4MLP(config)
+            self.feed_forward = Llama4MLP(config, intermediate_size=config.intermediate_size_mlp)
         self.input_layernorm = RMSNormFused(
             size=config.hidden_size,
             eps=config.rms_norm_eps,
