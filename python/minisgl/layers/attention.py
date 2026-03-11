@@ -56,7 +56,7 @@ class AttentionLayer(StateLessOP):
     def _get_attn_scale(self, positions: torch.Tensor) -> torch.Tensor:
         floor = torch.floor((positions + 1.0) / self.floor_scale)
         attn_scale = torch.log(floor + 1.0) * self.attn_scale + 1.0
-        return attn_scale.unsqueeze(-1)
+        return attn_scale.unsqueeze(-1).unsqueeze(-1)
 
     def _mul_attn_scale(self, positions, q: torch.Tensor) -> torch.Tensor:
         attn_scale = self._get_attn_scale(positions)
