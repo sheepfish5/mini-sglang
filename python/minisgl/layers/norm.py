@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Dict, Tuple
 
 import torch
 
@@ -11,17 +11,42 @@ class RMSNorm(BaseOP):
 
         self.has_weight = has_weight
         self.eps = eps
-        # BaseOP.load_state_dict() doesn't load private attributes
-        self._weight = torch.ones(size)
-        if self.has_weight:
-            self.weight = self._weight
+        self.weight = torch.ones(size)
         self.rmsnorm = rmsnorm
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.rmsnorm(x, self._weight, self.eps)
+        return self.rmsnorm(x, self.weight, self.eps)
 
     def forward_inplace(self, x: torch.Tensor) -> None:
-        self.rmsnorm(x, self._weight, self.eps, out=x)
+        self.rmsnorm(x, self.weight, self.eps, out=x)
+
+    def state_dict(
+        self, *, prefix: str = "", result: Dict[str, torch.Tensor] | None = None
+    ) -> Dict[str, torch.Tensor]:
+        if self.has_weight:
+            return super().state_dict(prefix=prefix, result=result)
+        return {} if result is None else result
+
+    def load_state_dict(
+        self,
+        state_dict: Dict[str, torch.Tensor],
+        *,
+        prefix: str = "",
+        _internal: bool = False,
+    ) -> None:
+        if self.has_weight:
+            return super().load_state_dict(state_dict, prefix=prefix, _internal=_internal)
+
+        if self.weight.device.type == "meta":
+            ref = next(iter(state_dict.values()), None)
+            if ref is None:
+                raise RuntimeError(
+                    f"Cannot materialize {prefix or 'RMSNorm'} weight without a reference tensor"
+                )
+            self.weight = torch.ones(self.weight.shape, dtype=self.weight.dtype, device=ref.device)
+
+        if not _internal and state_dict:
+            raise RuntimeError(f"Unexpected keys in state_dict: {list(state_dict.keys())}")
 
 
 class RMSNormFused(BaseOP):
