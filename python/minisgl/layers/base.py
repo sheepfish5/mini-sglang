@@ -86,7 +86,7 @@ class BaseOP:
                             f"No weights found in state_dict for {prefix} and {mapped_name}"
                         )
 
-                    item = torch.stack(items, dim=0) if len(items) > 1 else items
+                    item = torch.stack(items, dim=0) if len(items) > 1 else items[0]
                     if hasattr(param, "post_process"):
                         item = param.post_process(item)
                 else:
