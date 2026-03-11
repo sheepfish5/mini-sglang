@@ -96,9 +96,9 @@ class Llama4MoE(BaseOP):
     def _forward_core(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         assert hidden_states.dim() == 2, "Expected hidden_states to be of shape [num_tokens, hidden_dim]"
         # router_scores: [num_tokens, num_experts]
-        router_logits = self.router(hidden_states)
-        shared_out = self.shared_expert(hidden_states)
-        routed_out = self.experts(hidden_states, router_logits)
+        router_logits = self.router.forward(hidden_states)
+        shared_out = self.shared_expert.forward(hidden_states)
+        routed_out = self.experts.forward(hidden_states, router_logits)
         return shared_out, routed_out
 
 class Llama4DecoderLayer(BaseOP):
