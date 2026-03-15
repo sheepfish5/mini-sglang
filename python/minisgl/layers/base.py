@@ -4,6 +4,7 @@ import re
 from abc import abstractmethod
 from typing import Any, Dict, Generic, List, TypeAlias, TypeVar
 
+from minisgl.distributed.info import get_tp_info
 import torch
 
 _STATE_DICT: TypeAlias = Dict[str, torch.Tensor]
@@ -92,6 +93,9 @@ class BaseOP:
                 else:
                     item = state_dict.pop(_concat_prefix(prefix, name))
 
+                # tp_info = get_tp_info()
+                # if tp_info.rank == 0:
+                #     print(f"[assign_weight]: name=={_concat_prefix(prefix, name)}, param.shape=={param.shape}, item.shape=={item.shape}, param.dtype=={param.dtype}, item.dtype=={item.dtype}")
                 assert isinstance(item, torch.Tensor)
                 assert param.shape == item.shape and param.dtype == item.dtype
 

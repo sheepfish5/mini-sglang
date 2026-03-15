@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import gc
 from typing import Dict, Iterator, Tuple
 
 import safetensors
@@ -82,7 +83,21 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
                 if name.startswith(("vision_model.", "multi_modal_projector.")):
                     continue
                 raw = f.get_tensor(name)
+                # if r == 0:
+                #     memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                #     memory_reserved = torch.cuda.memory_reserved() / 1024**3
+                #     print(f"[load_weight]: name=={name}, shape=={raw.shape}\n  Before sharding: allocated={memory_allocated} GB, reserved={memory_reserved} GB")
+
+                gc.collect()
+                torch.cuda.empty_cache()
                 tensor = _shard_tensor(name, raw, r, n).to(device) if tp else raw
+
+                # if r == 0:
+                #     memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                #     memory_reserved = torch.cuda.memory_reserved() / 1024**3
+                #     print(f"[load_weight]: name=={name}, shard_shape=={tensor.shape}\n  After sharding: allocated={memory_allocated} GB, reserved={memory_reserved} GB")
+
+
                 del raw
 
                 info = _get_merge_info(name)

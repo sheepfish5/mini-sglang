@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import os
 from typing import Any, Dict, NamedTuple, Tuple
 
 import torch
@@ -198,6 +199,10 @@ class Engine:
 
         for req in batch.reqs:
             req.complete_one()
+
+        # if batch.size == 1:
+        #     torch.save(logits[0].float().cpu(), "/root/autodl-tmp/mini-sglang/tmp/mini_logits.pt")
+        #     os._exit(0)
 
         next_tokens_gpu = self.sampler.sample(logits[: batch.size], args).to(torch.int32)
         next_tokens_cpu = next_tokens_gpu.to("cpu", non_blocking=True)
