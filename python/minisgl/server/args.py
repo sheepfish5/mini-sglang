@@ -154,6 +154,12 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
     )
 
     parser.add_argument(
+        "--disable-cuda-graph",
+        action="store_true",
+        help="Disable CUDA graph capture entirely. Useful for debugging.",
+    )
+
+    parser.add_argument(
         "--num-tokenizer",
         "--tokenizer-count",
         type=int,
@@ -228,10 +234,13 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
 
     # resolve some arguments
     run_shell |= kwargs.pop("shell_mode")
+    disable_cuda_graph = kwargs.pop("disable_cuda_graph")
     if run_shell:
-        kwargs["cuda_graph_max_bs"] = 1
+        kwargs["cuda_graph_max_bs"] = 0
         kwargs["max_running_req"] = 1
         kwargs["silent_output"] = True
+    if disable_cuda_graph:
+        kwargs["cuda_graph_max_bs"] = 0
 
     if kwargs["model_path"].startswith("~"):
         kwargs["model_path"] = os.path.expanduser(kwargs["model_path"])
