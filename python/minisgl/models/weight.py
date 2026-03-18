@@ -30,8 +30,27 @@ _SLOT_NAMES = {
 }
 
 
-def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int) -> torch.Tensor:
+def _interleave_to_half_rows(value: torch.Tensor, head_dim: int) -> torch.Tensor:
+    original_shape = value.shape
+    num_heads = value.shape[0] // head_dim
+    value = value.view(num_heads, head_dim, *value.shape[1:])
+    even = value[:, ::2, ...]
+    odd = value[:, 1::2, ...]
+    return torch.cat((even, odd), dim=1).reshape(original_shape)
+
+
+def _needs_llama4_qk_reorder(key: str, is_llama4: bool, value: torch.Tensor) -> bool:
+    if not is_llama4 or value.ndim != 2:
+        return False
+    return ".self_attn.q_proj.weight" in key or ".self_attn.k_proj.weight" in key
+
+
+def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, is_llama4: bool = False) -> torch.Tensor:
     """Extract rank r's shard from a single tensor. Returns a contiguous copy."""
+    if _needs_llama4_qk_reorder(key, is_llama4, value):
+        head_dim = 128
+        value = _interleave_to_half_rows(value, head_dim)
+
     if any(key.count(sub) for sub in _SPLIT_DIM_0):
         return value.chunk(n, dim=0)[r].clone()
     elif any(key.count(sub) for sub in _SPLIT_DIM_1):
@@ -60,11 +79,19 @@ def _get_merge_info(key: str):
     return None
 
 
-def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, torch.Tensor]]:
+def load_weight(
+    model_path: str,
+    device: torch.device,
+    architectures: tuple[str, ...] | None = None,
+    model_type: str | None = None,
+) -> Iterator[Tuple[str, torch.Tensor]]:
     """Streaming weight loader. Yields (name, tensor) pairs already sharded, merged,
     and on device. Peak CPU memory: one full tensor + a small merge buffer."""
     model_folder = download_hf_weight(model_path)
     files = sorted(glob.glob(f"{model_folder}/*.safetensors"))
+    is_llama4 = (architectures is not None and "Llama4ForConditionalGeneration" in architectures) or (
+        model_type in {"llama4", "llama4_text"}
+    )
 
     tp_info = get_tp_info()
     r, n = tp_info.rank, tp_info.size
@@ -90,7 +117,7 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
 
                 gc.collect()
                 torch.cuda.empty_cache()
-                tensor = _shard_tensor(name, raw, r, n).to(device) if tp else raw
+                tensor = _shard_tensor(name, raw, r, n, is_llama4=is_llama4).to(device) if tp else raw
 
                 # if r == 0:
                 #     memory_allocated = torch.cuda.memory_allocated() / 1024**3
