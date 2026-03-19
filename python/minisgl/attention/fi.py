@@ -93,13 +93,13 @@ class FlashInferBackend(BaseAttnBackend):
         self.prefill_wrapper = BatchPrefillWithPagedKVCacheWrapper(
             self.float_workspace_buffer,
             kv_layout="NHD",
-            backend="fa3",  # flashinfer fa3 is slow, use fa2 instead
+            backend="fa2",  # flashinfer fa3 is slow, use fa2 instead
         )
         self.decode_wrappers = BatchDecodeWithPagedKVCacheWrapper(
             self.float_workspace_buffer,
             use_tensor_cores=self.use_tensor_cores,
             kv_layout="NHD",
-            backend="fa3",  # flashinfer fa3 is slow, use fa2 instead
+            backend="fa2",  # flashinfer fa3 is slow, use fa2 instead
         )
 
         # NOTE: some hack to reuse the int_workspace_buffer
