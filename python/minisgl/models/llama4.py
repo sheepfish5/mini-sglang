@@ -59,7 +59,7 @@ class Llama4Attn(BaseOP):
         )
         self.has_qk_norm = has_qk_norm
         if has_qk_norm:
-            self.qk_norm = Llama4QKNorm(head_dim, eps=config.rms_norm_eps, has_weight=has_qk_norm_weight)
+            self.qk_norm = RMSNorm(head_dim, eps=config.rms_norm_eps, has_weight=has_qk_norm_weight)
         else:
             self.qk_norm = None
         self.attn = AttentionLayer(
