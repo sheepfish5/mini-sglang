@@ -100,7 +100,7 @@ class Llama4Attn(BaseOP):
 
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[Llama4Attn.forward] [{self.layer_id}] attn_after_attention.shape=={o.shape}")
-            torch.save(o, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
+            torch.save(o.view(13, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
 
         return self.o_proj.forward(o)
 
