@@ -98,11 +98,20 @@ class AttentionLayer(StateLessOP):
             print(f"[AttentionLayer.forward] [{self.layer_id}] positions.shape=={positions.shape}, positions=={positions}")
 
         if qk_norm_combined and qk_norm is not None:
+            if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
+                print("执行 qk_norm")
+                print(f"[AttentionLayer.forward] [{self.layer_id}] before_qk_norm ")
+                torch.save(qkv, f"/root/autodl-tmp/mini-sglang/tmp/sglang_l{self.layer_id}_before_qknorm_qkv.pt")
+                torch.save(qk_norm.weight, f"/root/autodl-tmp/mini-sglang/tmp/sglang_l{self.layer_id}_before_qknorm_qk_norm_weight.pt")
+
             # qk_norm.forward_inplace(torch.stack([q.view(-1, self.num_qo_heads, self.head_dim), k.view(-1, self.num_kv_heads, self.head_dim)]))
             qk, _ = qkv.split([self.qo_attn_dim + self.kv_attn_dim, self.kv_attn_dim], dim=-1)
             qk_norm.forward_inplace(qk.view(-1, self.num_qo_heads + self.num_kv_heads, self.head_dim))
             del qk
-            # print("执行 qk_norm")
+            
+            if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
+                print(f"[AttentionLayer.forward] [{self.layer_id}] after_qknorm")
+                torch.save(qkv, f"/root/autodl-tmp/mini-sglang/tmp/sglang_l{self.layer_id}_after_qknorm_qkv.pt")    
         else:
             if self.q_norm is not None:
                 self.q_norm.forward_inplace(q.view(-1, self.num_qo_heads, self.head_dim))
