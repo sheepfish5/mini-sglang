@@ -149,4 +149,9 @@ class AttentionLayer(StateLessOP):
 
 
         o = ctx.attn_backend.forward(q, k, v, self.layer_id, ctx.batch)
+
+        if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
+            print(f"[AttentionLayer.forward] [{self.layer_id}] after_attn_backend.shape=={o.shape}")
+            torch.save(o, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_attn_backend_attn_output.pt")
+
         return o.view(-1, self.qo_attn_dim)
