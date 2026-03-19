@@ -35,14 +35,6 @@ from .utils import GatedMLP as Llama4MLP
 if TYPE_CHECKING:
     from .config import ModelConfig
 
-class Llama4QKNorm(RMSNorm):
-    def forward_inplace(self, x: torch.Tensor) -> None:
-        from sgl_kernel import rmsnorm
-
-        orig_shape = x.shape
-        x2d = x.view(-1, orig_shape[-1])
-        rmsnorm(x2d, self.weight, self.eps)
-
 class Llama4Attn(BaseOP):
     def __init__(
         self,
