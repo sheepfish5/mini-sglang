@@ -69,7 +69,7 @@ class AttentionLayer(StateLessOP):
         ctx = get_global_ctx()
         q, k, v = qkv.split([self.qo_attn_dim, self.kv_attn_dim, self.kv_attn_dim], dim=-1)
 
-        if q.shape[0] == 13:
+        if q.shape[0] == 14:
             self.debug_mode = True
         debug_ids = [0, 1]
 
@@ -77,19 +77,19 @@ class AttentionLayer(StateLessOP):
             if self.layer_id == 0:
                 ctx.batch.positions = ctx.batch.positions + 1
             if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
-                q_sum = torch.sum(q.view(13, -1), dim=-1)
-                k_sum = torch.sum(k.view(13, -1), dim=-1)
-                print(f"[AttentionLayer.forward] [{self.layer_id}] before_rope_q_sum=={q_sum}") # (13,)
-                print(f"[AttentionLayer.forward] [{self.layer_id}] before_rope_k_sum=={k_sum}") # (13,)
-                print(f"[AttentionLayer.forward] [{self.layer_id}] positions.shape=={ctx.batch.positions.shape}, positions=={ctx.batch.positions}") # (13,)
-                print(f"[AttentionLayer.forward] [{self.layer_id}] q.shape=={q.shape}, q.stride=={q.stride()}") # (13, 1280)
-                print(f"[AttentionLayer.forward] [{self.layer_id}] k.shape=={k.shape}, k.stride=={k.stride()}") # (13, 1280)
+                q_sum = torch.sum(q.view(14, -1), dim=-1)
+                k_sum = torch.sum(k.view(14, -1), dim=-1)
+                print(f"[AttentionLayer.forward] [{self.layer_id}] before_rope_q_sum=={q_sum}") # (14,)
+                print(f"[AttentionLayer.forward] [{self.layer_id}] before_rope_k_sum=={k_sum}") # (14,)
+                print(f"[AttentionLayer.forward] [{self.layer_id}] positions.shape=={ctx.batch.positions.shape}, positions=={ctx.batch.positions}") # (14,)
+                print(f"[AttentionLayer.forward] [{self.layer_id}] q.shape=={q.shape}, q.stride=={q.stride()}") # (14, 1280)
+                print(f"[AttentionLayer.forward] [{self.layer_id}] k.shape=={k.shape}, k.stride=={k.stride()}") # (14, 1280)
             self.rotary.forward(ctx.batch.positions, q, k)
             # print("执行 rope first")
         
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
-            print(f"[AttentionLayer.forward] [{self.layer_id}] after_rope.shape=={q.shape}") # (13, 1280)
-            print(f"[AttentionLayer.forward] [{self.layer_id}] self.rotary._cos_sin_cache.shape=={self.rotary._cos_sin_cache.shape}") # (13, 1280)
+            print(f"[AttentionLayer.forward] [{self.layer_id}] after_rope.shape=={q.shape}") # (14, 1280)
+            print(f"[AttentionLayer.forward] [{self.layer_id}] self.rotary._cos_sin_cache.shape=={self.rotary._cos_sin_cache.shape}") # (14, 1280)
             torch.save(q, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_rope_q.pt") 
             torch.save(k, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_rope_k.pt")
             torch.save(v, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_rope_v.pt")
@@ -121,7 +121,7 @@ class AttentionLayer(StateLessOP):
             q, k = self.rotary.forward(ctx.batch.positions, q, k)
         
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
-            print(f"[AttentionLayer.forward] [{self.layer_id}] after_qknorm.shape=={q.shape}") # (13, 1280)
+            print(f"[AttentionLayer.forward] [{self.layer_id}] after_qknorm.shape=={q.shape}") # (14, 1280)
             torch.save(q, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_qknorm_q.pt")
             torch.save(k, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_qknorm_k.pt")
             torch.save(v, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_qknorm_v.pt")

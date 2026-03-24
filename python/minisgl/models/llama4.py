@@ -86,7 +86,7 @@ class Llama4Attn(BaseOP):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv_proj.forward(x)
 
-        if x.shape[0] == 13:
+        if x.shape[0] == 14:
             self.debug_mode = True
     
         debug_ids = [0, 1]
@@ -100,7 +100,7 @@ class Llama4Attn(BaseOP):
 
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[Llama4Attn.forward] [{self.layer_id}] attn_after_attention.shape=={o.shape}")
-            torch.save(o.view(13, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
+            torch.save(o.view(14, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
 
         return self.o_proj.forward(o)
 
@@ -221,7 +221,7 @@ class Llama4DecoderLayer(BaseOP):
         if self.layer_id == 0:
             print(f"Layer {self.layer_id}: use_rope={self.use_rope}, use_qk_norm={self.use_qk_norm}")
 
-        if x.shape[0] == 13:
+        if x.shape[0] == 14:
             self.debug_mode = True
     
         debug_ids = [0, 1]
@@ -269,7 +269,7 @@ class Llama4Model(BaseOP):
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         print(f"[Llama4Model.forward] input_ids.shape=={input_ids.shape}, input_ids=={input_ids.cpu()}")
 
-        if input_ids.shape[0] == 13:
+        if input_ids.shape[0] == 14:
             self.debug_mode = True
             input_ids_list = [200005, 1556, 200006, 368, 33267, 583, 650, 43, 200008, 200005, 140680, 200006, 368]
             input_ids = torch.tensor(input_ids_list, dtype=input_ids.dtype, device=input_ids.device)
