@@ -102,6 +102,17 @@ class Llama4Attn(BaseOP):
             print(f"[Llama4Attn.forward] [{self.layer_id}] attn_after_attention.shape=={o.shape}")
             torch.save(o.view(14, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
 
+            o_proj_weight = self.o_proj.weight.detach().clone().cpu().contiguous()
+            print(
+                f"[Llama4Attn.forward] [{self.layer_id}] "
+                f"o_proj_weight.shape=={o_proj_weight.shape}, dtype=={o_proj_weight.dtype}"
+            )
+            torch.save(
+                o_proj_weight,
+                "/root/autodl-tmp/mini-sglang/tmp/l0_o_proj_weight.pt",
+            )
+
+
         return self.o_proj.forward(o)
 
 class Llama4MoE(BaseOP):
