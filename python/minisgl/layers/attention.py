@@ -147,11 +147,72 @@ class AttentionLayer(StateLessOP):
             torch.save(k, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_before_attn_backend_k.pt")
             torch.save(v, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_before_attn_backend_v.pt")
 
+            def _cpu(x):
+                if x is None:
+                    return None
+                if isinstance(x, torch.Tensor):
+                    return x.detach().cpu().contiguous()
+                return x
+
+            def _dump_mini_attn_backend(layer_id, q, k, v, batch):
+                md = batch.attn_metadata
+                payload = {
+                    "layer_id": layer_id,
+                    "backend_type": type(get_global_ctx().attn_backend).__name__,
+                    "metadata_type": type(md).__name__,
+                    "phase": batch.phase,
+                    "q": _cpu(q),
+                    "k": _cpu(k),
+                    "v": _cpu(v),
+                    "positions": _cpu(batch.positions),
+                    "out_loc": _cpu(batch.out_loc),
+                    "reqs": [
+                        {
+                            "table_idx": req.table_idx,
+                            "cached_len": req.cached_len,
+                            "device_len": req.device_len,
+                            "extend_len": req.extend_len,
+                            "max_device_len": req.max_device_len,
+                            "uid": req.uid,
+                        }
+                        for req in batch.reqs
+                    ],
+                    "padded_reqs": [
+                        {
+                            "table_idx": req.table_idx,
+                            "cached_len": req.cached_len,
+                            "device_len": req.device_len,
+                            "extend_len": req.extend_len,
+                            "max_device_len": req.max_device_len,
+                            "uid": req.uid,
+                        }
+                        for req in batch.padded_reqs
+                    ],
+                    "attn_metadata": {
+                        "cu_seqlens_q_cpu": _cpu(getattr(md, "cu_seqlens_q_cpu", None)),
+                        "cu_seqlens_k_cpu": _cpu(getattr(md, "cu_seqlens_k_cpu", None)),
+                        "cu_seqlens_q_gpu": _cpu(getattr(md, "cu_seqlens_q_gpu", None)),
+                        "indices": _cpu(getattr(md, "indices", None)),
+                        "last_page_len_cpu": _cpu(getattr(md, "last_page_len_cpu", None)),
+                        "seq_lens_cpu": _cpu(getattr(md, "seq_lens_cpu", None)),
+                        "num_qo_heads": getattr(md, "num_qo_heads", None),
+                        "num_kv_heads": getattr(md, "num_kv_heads", None),
+                        "head_dim": getattr(md, "head_dim", None),
+                        "page_size": getattr(md, "page_size", None),
+                        "pos_encoding_mode": getattr(md, "pos_encoding_mode", None),
+                        "dtype": str(getattr(md, "dtype", None)),
+                        "wrapper_type": type(getattr(md, "wrapper", None)).__name__,
+                    },
+                }
+                torch.save(payload, f"/root/autodl-tmp/mini-sglang/tmp/attn_debug/l{layer_id}_mini_attn_backend_meta.pt")
+
+            _dump_mini_attn_backend(self.layer_id, q, k, v, ctx.batch)
+
 
         o = ctx.attn_backend.forward(q, k, v, self.layer_id, ctx.batch)
 
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[AttentionLayer.forward] [{self.layer_id}] after_attn_backend.shape=={o.shape}")
-            torch.save(o, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_attn_backend_attn_output.pt")
+            torch.save(o, f"/root/autodl-tmp/mini-sglang/tmp/attn_debug/l{self.layer_id}_after_attn_backend_attn_output.pt")
 
         return o.view(-1, self.qo_attn_dim)
