@@ -74,8 +74,6 @@ class AttentionLayer(StateLessOP):
         debug_ids = [0, 1]
 
         if rope_first and self.has_rope:
-            if self.layer_id == 0:
-                ctx.batch.positions = ctx.batch.positions + 1
             if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
                 q_sum = torch.sum(q.view(14, -1), dim=-1)
                 k_sum = torch.sum(k.view(14, -1), dim=-1)

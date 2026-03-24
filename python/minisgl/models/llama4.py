@@ -271,7 +271,7 @@ class Llama4Model(BaseOP):
 
         if input_ids.shape[0] == 14:
             self.debug_mode = True
-            input_ids_list = [200005, 1556, 200006, 368, 33267, 583, 650, 43, 200008, 200005, 140680, 200006, 368]
+            input_ids_list = [200000, 200005, 1556, 200006, 368, 33267, 583, 650, 43, 200008, 200005, 140680, 200006, 368]
             input_ids = torch.tensor(input_ids_list, dtype=input_ids.dtype, device=input_ids.device)
 
         x = self.embed_tokens.forward(input_ids)

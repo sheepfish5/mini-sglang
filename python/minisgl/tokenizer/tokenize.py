@@ -27,6 +27,5 @@ class TokenizeManager:
             input_ids: torch.Tensor = (  # type: ignore
                 self.tokenizer.encode(prompt, return_tensors="pt", add_special_tokens=False)
             )
-            tmp = input_ids.view(-1).to(torch.int32)
-            results.append(tmp if tmp.shape[0] <= 1 else tmp[1:])
+            results.append(input_ids.view(-1).to(torch.int32))
         return results
