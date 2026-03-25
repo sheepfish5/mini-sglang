@@ -105,6 +105,21 @@ class LinearOProj(_LinearTPImpl):
             y = self._comm.all_reduce(y)
         return y
 
+    def forward_debug(
+        self, 
+        x: torch.Tensor, 
+        is_debug: bool = False,
+        dump_file_name: str | None = None,
+    ) -> torch.Tensor:
+        y = F.linear(x, self.weight, self.bias)
+
+        if is_debug and dump_file_name is not None:
+            torch.save(y, dump_file_name)
+
+        if self._tp_size > 1:
+            y = self._comm.all_reduce(y)
+        return y
+
 
 class LinearRowParallel(_LinearTPImpl):
     def __init__(

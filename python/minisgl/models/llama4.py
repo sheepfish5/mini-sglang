@@ -98,9 +98,9 @@ class Llama4Attn(BaseOP):
         del x
         o = self.attn.forward(qkv, rope_first=True, qk_norm_combined=True, qk_norm=self.qk_norm)
 
-        if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
+        if self.layer_id in debug_ids and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[Llama4Attn.forward] [{self.layer_id}] attn_after_attention.shape=={o.shape}")
-            torch.save(o.view(14, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_attn_after_attention.pt")
+            torch.save(o.view(14, 1280), f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_rank{self.attn_tp_rank}_attn_output.pt")
 
             o_proj_weight = self.o_proj.weight.detach().clone().cpu().contiguous()
             print(
@@ -109,11 +109,14 @@ class Llama4Attn(BaseOP):
             )
             torch.save(
                 o_proj_weight,
-                f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_o_proj_weight.pt",
+                f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_rank{self.attn_tp_rank}_o_proj_weight.pt",
             )
 
 
-        return self.o_proj.forward(o)
+        return self.o_proj.forward_debug(
+            o, 
+            self.layer_id in debug_ids and hasattr(self, "debug_mode") and self.debug_mode,
+            f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_rank{self.attn_tp_rank}_o_proj_output.pt")
 
 class Llama4MoE(BaseOP):
 
@@ -245,7 +248,7 @@ class Llama4DecoderLayer(BaseOP):
 
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[Llama4DecoderLayer.forward] [{self.layer_id}] after_attn_hidden_states.shape=={x.shape}")
-            torch.save(x, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_after_attn_hidden_states.pt")
+            torch.save(x, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_reduced_o_proj_output.pt")
 
         x, residual = self.post_attention_layernorm.forward(x, residual)
 
