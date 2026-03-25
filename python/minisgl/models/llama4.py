@@ -109,7 +109,7 @@ class Llama4Attn(BaseOP):
             )
             torch.save(
                 o_proj_weight,
-                "/root/autodl-tmp/mini-sglang/tmp/l0_o_proj_weight.pt",
+                f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_o_proj_weight.pt",
             )
 
 
