@@ -249,6 +249,7 @@ class Llama4DecoderLayer(BaseOP):
         if self.layer_id in debug_ids and self.attn_tp_rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             print(f"[Llama4DecoderLayer.forward] [{self.layer_id}] after_attn_hidden_states.shape=={x.shape}")
             torch.save(x, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_reduced_o_proj_output.pt")
+            torch.save(residual, f"/root/autodl-tmp/mini-sglang/tmp/l{self.layer_id}_before_post_attn_layernorm_residual.pt")
 
         x, residual = self.post_attention_layernorm.forward(x, residual)
 
