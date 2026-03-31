@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from minisgl.layers import RMSNorm
     from minisgl.models import RotaryConfig
 
+GLOBAL_ATTN_DEBUG = False
 
 class AttentionLayer(StateLessOP):
     def __init__(
@@ -69,7 +70,8 @@ class AttentionLayer(StateLessOP):
         ctx = get_global_ctx()
         q, k, v = qkv.split([self.qo_attn_dim, self.kv_attn_dim, self.kv_attn_dim], dim=-1)
 
-        if q.shape[0] == 14:
+        global GLOBAL_ATTN_DEBUG
+        if GLOBAL_ATTN_DEBUG and q.shape[0] == 14:
             self.debug_mode = True
         debug_ids = [0, 1]
 

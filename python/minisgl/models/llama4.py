@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pickle import GLOBAL
 from typing import TYPE_CHECKING, Tuple
 
 from minisgl.distributed.info import get_tp_info
@@ -34,6 +35,8 @@ from .utils import GatedMLP as Llama4MLP
 
 if TYPE_CHECKING:
     from .config import ModelConfig
+
+GLOBAL_DEBUG = False
 
 class Llama4Attn(BaseOP):
     def __init__(
@@ -86,7 +89,8 @@ class Llama4Attn(BaseOP):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv_proj.forward(x)
 
-        if x.shape[0] == 14:
+        global GLOBAL_DEBUG
+        if GLOBAL_DEBUG and x.shape[0] == 14:
             self.debug_mode = True
     
         debug_ids = [0, 1]
@@ -232,10 +236,11 @@ class Llama4DecoderLayer(BaseOP):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x, residual = self.input_layernorm.forward(x, residual)
 
-        if self.layer_id == 0:
+        global GLOBAL_DEBUG
+        if GLOBAL_DEBUG and self.layer_id == 0:
             print(f"Layer {self.layer_id}: use_rope={self.use_rope}, use_qk_norm={self.use_qk_norm}")
 
-        if x.shape[0] == 14:
+        if GLOBAL_DEBUG and x.shape[0] == 14:
             self.debug_mode = True
     
         debug_ids = [0, 1]
@@ -284,16 +289,17 @@ class Llama4Model(BaseOP):
         )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        print(f"[Llama4Model.forward] input_ids.shape=={input_ids.shape}, input_ids=={input_ids.cpu()}")
+        # print(f"[Llama4Model.forward] input_ids.shape=={input_ids.shape}, input_ids=={input_ids.cpu()}")
 
-        if input_ids.shape[0] == 14:
+        global GLOBAL_DEBUG
+        if GLOBAL_DEBUG and input_ids.shape[0] == 14:
             self.debug_mode = True
             input_ids_list = [200000, 200005, 1556, 200006, 368, 33267, 583, 650, 43, 200008, 200005, 140680, 200006, 368]
             input_ids = torch.tensor(input_ids_list, dtype=input_ids.dtype, device=input_ids.device)
 
         x = self.embed_tokens.forward(input_ids)
 
-        if self.rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
+        if GLOBAL_DEBUG and self.rank == 0 and hasattr(self, "debug_mode") and self.debug_mode:
             torch.save(x, "tmp/embeddings.pt")
             print(f"[Llama4Model.forward] embeddings.shape=={x.shape}")
 
@@ -322,7 +328,8 @@ class Llama4ForCausalLM(BaseLLMModel):
         
         logits = self.lm_head.forward(output)
 
-        if self.model.rank == 0:
+        global GLOBAL_DEBUG
+        if GLOBAL_DEBUG and self.model.rank == 0:
             print(f"[Llama4ForCausalLM.forward] logits.shape=={logits.shape}")
             torch.save(logits, "tmp/logits.pt")
 
