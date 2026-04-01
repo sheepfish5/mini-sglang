@@ -4,6 +4,7 @@ import glob
 import re
 from typing import Dict, Iterator, Tuple
 
+from minisgl.models.config import ModelConfig
 import safetensors
 import torch
 from minisgl.distributed import get_tp_info
@@ -39,22 +40,24 @@ def _interleave_to_half_rows(value: torch.Tensor, head_dim: int) -> torch.Tensor
     odd = value[:, 1::2, ...]
     return torch.cat((even, odd), dim=1).reshape(original_shape)
 
-def _needs_llama4_qk_reorder(key: str, is_llama4: bool, value: torch.Tensor) -> bool:
+def _needs_llama4_qk_reorder(key: str, value: torch.Tensor, model_config: ModelConfig) -> bool:
+    is_llama4 = (model_config.architectures is not None and "Llama4ForConditionalGeneration" in model_config.architectures) or (
+        model_config.model_type in {"llama4", "llama4_text"}
+    )
     if not is_llama4 or value.ndim != 2:
         return False
     return ".self_attn.q_proj.weight" in key or ".self_attn.k_proj.weight" in key
 
-def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, num_kv_heads: int, is_llama4: bool = False) -> torch.Tensor:
+def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, config: ModelConfig) -> torch.Tensor:
     """Extract rank r's shard from a single tensor. Returns a contiguous copy."""
-    if _needs_llama4_qk_reorder(key, is_llama4, value):
-        head_dim = 128
-        value = _interleave_to_half_rows(value, head_dim)
+    if _needs_llama4_qk_reorder(key, value, config):
+        value = _interleave_to_half_rows(value, config.head_dim)
 
     if any(key.count(sub) for sub in _SPLIT_DIM_0):
         is_kv_proj = any(key.count(sub) for sub in (".k_proj", ".v_proj"))
-        if is_kv_proj and num_kv_heads is not None and num_kv_heads < n:
-            head_dim = value.shape[0] // num_kv_heads
-            head_idx = r * num_kv_heads // n
+        if is_kv_proj and config.num_kv_heads is not None and config.num_kv_heads < n:
+            head_dim = value.shape[0] // config.num_kv_heads
+            head_idx = r * config.num_kv_heads // n
             return value[head_idx * head_dim : (head_idx + 1) * head_dim].clone()
         return value.chunk(n, dim=0)[r].clone()
     elif any(key.count(sub) for sub in _SPLIT_DIM_1):
@@ -97,15 +100,10 @@ def _get_expert_stack_info(key: str) -> tuple[str, int] | None:
 def load_weight(
     model_path: str,
     device: torch.device,
-    architectures: tuple[str, ...] | None = None,
-    model_type: str | None = None,
 ) -> Iterator[Tuple[str, torch.Tensor]]:
     """Streaming weight loader. Yields (name, tensor) pairs already sharded, merged,
     and on device. Peak CPU memory: one full tensor + a small merge buffer."""
     from .config import ModelConfig
-    is_llama4 = (architectures is not None and "Llama4ForConditionalGeneration" in architectures) or (
-        model_type in {"llama4", "llama4_text"}
-    )
 
     model_folder = download_hf_weight(model_path)
     config = ModelConfig.from_hf(cached_load_hf_config(model_path))
@@ -123,7 +121,7 @@ def load_weight(
                 if name.startswith(("vision_model.", "multi_modal_projector.")):
                     continue
                 raw = f.get_tensor(name)
-                tensor = _shard_tensor(name, raw, tp_info.rank, tp_info.size, config.num_kv_heads, is_llama4=is_llama4).to(device)
+                tensor = _shard_tensor(name, raw, tp_info.rank, tp_info.size, config).to(device)
                 del raw
 
                 if (info := _get_merge_info(name)) is None:
