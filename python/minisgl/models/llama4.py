@@ -31,13 +31,66 @@ from minisgl.layers import (
 from .base import BaseLLMModel
 from .utils import MoEMLP as Qwen3MLP
 from .utils import GatedMLP as Llama4MLP
-from .utils import RopeAttn as Llama4Attn
 
 if TYPE_CHECKING:
     from .config import ModelConfig
 
 def _concat_prefix(prefix: str, name: str) -> str:
     return f"{prefix}.{name}" if prefix else name
+
+class Llama4Attn(BaseOP):
+    def __init__(
+        self,
+        config: ModelConfig,
+        layer_id: int,
+        *,
+        has_attn_bias: bool = False,
+        has_qk_norm: bool = False,
+        has_qk_norm_weight: bool = True,
+        has_rope: bool = True,
+        attn_temperature_tuning: bool = False,
+        floor_scale=8192,
+        attn_scale=0.1,
+    ):
+        head_dim = config.head_dim
+        self.qkv_proj = LinearQKVMerged(
+            hidden_size=config.hidden_size,
+            head_dim=config.head_dim,
+            num_qo_heads=config.num_qo_heads,
+            num_kv_heads=config.num_kv_heads,
+            has_bias=has_attn_bias,
+        )
+        self.has_qk_norm = has_qk_norm
+        if has_qk_norm:
+            self.qk_norm = RMSNorm(head_dim, eps=config.rms_norm_eps, has_weight=has_qk_norm_weight)
+        else:
+            self.qk_norm = None
+        self.attn = AttentionLayer(
+            layer_id=layer_id,
+            head_dim=head_dim,
+            num_qo_heads=config.num_qo_heads,
+            num_kv_heads=config.num_kv_heads,
+            rotary_config=config.rotary_config,
+            has_rope=has_rope,
+            attn_temperature_tuning=attn_temperature_tuning,
+            floor_scale=floor_scale,
+            attn_scale=attn_scale,
+        )
+        self.o_proj = LinearOProj(
+            head_dim * config.num_qo_heads,
+            config.hidden_size,
+            has_bias=False,
+        )
+        self.layer_id = layer_id
+
+    @nvtx_annotate("MHA")
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        qkv = self.qkv_proj.forward(x)
+
+        del x
+        o = self.attn.forward(qkv, rope_first=True, qk_norm_combined=True, qk_norm=self.qk_norm)
+
+        return self.o_proj.forward(o)
 
 class Llama4MoE(BaseOP):
 

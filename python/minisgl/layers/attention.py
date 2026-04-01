@@ -62,14 +62,23 @@ class AttentionLayer(StateLessOP):
         attn_scale = self._get_attn_scale(positions)
         return (q * attn_scale).to(q.dtype)
 
-    def forward(self, qkv: torch.Tensor) -> torch.Tensor:
+    def forward(self, qkv: torch.Tensor, rope_first: bool = False, qk_norm_combined: bool = False, qk_norm: RMSNorm | None = None) -> torch.Tensor:
         ctx = get_global_ctx()
         q, k, v = qkv.split([self.qo_attn_dim, self.kv_attn_dim, self.kv_attn_dim], dim=-1)
-        if self.q_norm is not None:
-            self.q_norm.forward_inplace(q.view(-1, self.num_qo_heads, self.head_dim))
-        if self.k_norm is not None:
-            self.k_norm.forward_inplace(k.view(-1, self.num_kv_heads, self.head_dim))
-        if self.has_rope:
+        
+        if rope_first and self.has_rope:
+            self.rotary.forward(ctx.batch.positions, q, k)
+
+        if qk_norm_combined and qk_norm is not None:
+            qk, _ = qkv.split([self.qo_attn_dim + self.kv_attn_dim, self.kv_attn_dim], dim=-1)
+            qk_norm.forward_inplace(qk.view(-1, self.num_qo_heads + self.num_kv_heads, self.head_dim))
+            del qk
+        else:
+            if self.q_norm is not None:
+                self.q_norm.forward_inplace(q.view(-1, self.num_qo_heads, self.head_dim))
+            if self.k_norm is not None:
+                self.k_norm.forward_inplace(k.view(-1, self.num_kv_heads, self.head_dim))
+        if not rope_first and self.has_rope:
             q, k = self.rotary.forward(ctx.batch.positions, q, k)
         q = q.view(-1, self.num_qo_heads, self.head_dim)
 
