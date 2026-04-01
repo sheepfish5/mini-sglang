@@ -1,5 +1,5 @@
 import functools
-from typing import Dict, Tuple, Callable
+from typing import Callable, Dict, Tuple
 
 import torch
 from minisgl.moe import BaseMoeBackend

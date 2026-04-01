@@ -3,40 +3,35 @@ from __future__ import annotations
 from types import MethodType
 from typing import TYPE_CHECKING, Dict, Tuple
 
-from minisgl.distributed.info import get_tp_info
-from minisgl.utils.misc import div_even
 import torch
 from minisgl.core import get_global_ctx
-from minisgl.utils import nvtx_annotate
-
+from minisgl.distributed.info import get_tp_info
 from minisgl.layers import (
     AttentionLayer,
     BaseOP,
-    OPList,
-    ParallelLMHead,
-    LinearReplicated,
-    LinearColParallelMerged,
     LinearOProj,
     LinearQKVMerged,
     LinearReplicated,
-    LinearRowParallel,
     MoELayer,
+    OPList,
+    ParallelLMHead,
     RMSNorm,
     RMSNormFused,
     VocabParallelEmbedding,
-    gelu_and_mul,
-    silu_and_mul,
 )
+from minisgl.utils import nvtx_annotate
+from minisgl.utils.misc import div_even
 
 from .base import BaseLLMModel
-from .utils import MoEMLP as Qwen3MLP
 from .utils import GatedMLP as Llama4MLP
 
 if TYPE_CHECKING:
     from .config import ModelConfig
 
+
 def _concat_prefix(prefix: str, name: str) -> str:
     return f"{prefix}.{name}" if prefix else name
+
 
 class Llama4Attn(BaseOP):
     def __init__(
@@ -92,12 +87,10 @@ class Llama4Attn(BaseOP):
 
         return self.o_proj.forward(o)
 
+
 class Llama4MoE(BaseOP):
 
-    def __init__(
-        self,
-        config: ModelConfig
-    ):
+    def __init__(self, config: ModelConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
@@ -156,13 +149,23 @@ class Llama4MoE(BaseOP):
 
         tp_info = get_tp_info()
         intermediate_size_per_partition = div_even(intermediate_size_moe, tp_info.size)
+
         def gate_up_proj_post_process(weight: torch.Tensor) -> torch.Tensor:
-            assert weight.shape == (self.experts.num_experts, self.experts.hidden_size, 2*intermediate_size_per_partition)
+            assert weight.shape == (
+                self.experts.num_experts,
+                self.experts.hidden_size,
+                2 * intermediate_size_per_partition,
+            )
             return weight.transpose(1, 2).contiguous()
 
         def down_proj_post_process(weight: torch.Tensor) -> torch.Tensor:
-            assert weight.shape == (self.experts.num_experts, intermediate_size_per_partition, self.experts.hidden_size)
+            assert weight.shape == (
+                self.experts.num_experts,
+                intermediate_size_per_partition,
+                self.experts.hidden_size,
+            )
             return weight.transpose(1, 2).contiguous()
+
         setattr(self.experts.gate_up_proj, "post_process", gate_up_proj_post_process)
         setattr(self.experts.down_proj, "post_process", down_proj_post_process)
 
@@ -172,21 +175,22 @@ class Llama4MoE(BaseOP):
         self,
         hidden_states,
     ):
-        shared_out, routed_out = self._forward_core(
-            hidden_states
-        )
+        shared_out, routed_out = self._forward_core(hidden_states)
 
         out_aD = routed_out + shared_out
 
         return out_aD
 
     def _forward_core(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        assert hidden_states.dim() == 2, "Expected hidden_states to be of shape [num_tokens, hidden_dim]"
+        assert (
+            hidden_states.dim() == 2
+        ), "Expected hidden_states to be of shape [num_tokens, hidden_dim]"
         # router_scores: [num_tokens, num_experts]
         router_logits = self.router.forward(hidden_states)
         shared_out = self.shared_expert.forward(hidden_states)
         routed_out = self.experts.forward(hidden_states, router_logits)
         return shared_out, routed_out
+
 
 class Llama4DecoderLayer(BaseOP):
     def __init__(self, config: ModelConfig, layer_id: int):
@@ -197,8 +201,8 @@ class Llama4DecoderLayer(BaseOP):
         self.use_qk_norm = config.use_qk_norm and self.use_rope
 
         self.self_attn = Llama4Attn(
-            config, 
-            layer_id, 
+            config,
+            layer_id,
             has_qk_norm=self.use_qk_norm,
             has_qk_norm_weight=False,
             has_rope=self.use_rope,
@@ -235,7 +239,8 @@ class Llama4DecoderLayer(BaseOP):
         x, residual = self.post_attention_layernorm.forward(x, residual)
         x = self.feed_forward.forward(x)
         return x, residual
-    
+
+
 class Llama4Model(BaseOP):
     def __init__(self, config: ModelConfig):
         self.embed_tokens = VocabParallelEmbedding(
@@ -256,7 +261,8 @@ class Llama4Model(BaseOP):
         for layer in self.layers.op_list:
             x, residual = layer.forward(x, residual)
         return self.norm.forward(x, residual)[0]
-    
+
+
 class Llama4ForCausalLM(BaseLLMModel):
     def __init__(self, config: ModelConfig):
         self.model = Llama4Model(config)

@@ -45,7 +45,9 @@ class AttentionLayer(StateLessOP):
                 rotary_dim=rotary_config.rotary_dim,
                 max_position=rotary_config.max_position,
                 base=rotary_config.base,
-                rope_scaling=tuple(rotary_config.scaling.items()) if rotary_config.scaling else None,
+                rope_scaling=(
+                    tuple(rotary_config.scaling.items()) if rotary_config.scaling else None
+                ),
             )
         self.q_norm = q_norm
         self.k_norm = k_norm
@@ -62,16 +64,24 @@ class AttentionLayer(StateLessOP):
         attn_scale = self._get_attn_scale(positions)
         return (q * attn_scale).to(q.dtype)
 
-    def forward(self, qkv: torch.Tensor, rope_first: bool = False, qk_norm_combined: bool = False, qk_norm: RMSNorm | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        qkv: torch.Tensor,
+        rope_first: bool = False,
+        qk_norm_combined: bool = False,
+        qk_norm: RMSNorm | None = None,
+    ) -> torch.Tensor:
         ctx = get_global_ctx()
         q, k, v = qkv.split([self.qo_attn_dim, self.kv_attn_dim, self.kv_attn_dim], dim=-1)
-        
+
         if rope_first and self.has_rope:
             self.rotary.forward(ctx.batch.positions, q, k)
 
         if qk_norm_combined and qk_norm is not None:
             qk, _ = qkv.split([self.qo_attn_dim + self.kv_attn_dim, self.kv_attn_dim], dim=-1)
-            qk_norm.forward_inplace(qk.view(-1, self.num_qo_heads + self.num_kv_heads, self.head_dim))
+            qk_norm.forward_inplace(
+                qk.view(-1, self.num_qo_heads + self.num_kv_heads, self.head_dim)
+            )
             del qk
         else:
             if self.q_norm is not None:

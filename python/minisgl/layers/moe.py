@@ -1,9 +1,9 @@
+from typing import Callable
+
 import torch
 from minisgl.core import get_global_ctx
 from minisgl.distributed import DistributedCommunicator, get_tp_info
 from minisgl.utils import div_even
-
-from typing import Callable
 
 from .base import BaseOP
 
@@ -19,7 +19,7 @@ class MoELayer(BaseOP):
         activation: str = "silu",
         apply_router_weight_on_input: bool = False,
         topk_no_softmax: bool = False,
-        custom_routing_function: Callable[[torch.Tensor], torch.Tensor] | None = None
+        custom_routing_function: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ):
         super().__init__()
 

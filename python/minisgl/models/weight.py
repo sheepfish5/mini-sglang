@@ -4,10 +4,10 @@ import glob
 import re
 from typing import Dict, Iterator, Tuple
 
-from minisgl.models.config import ModelConfig
 import safetensors
 import torch
 from minisgl.distributed import get_tp_info
+from minisgl.models.config import ModelConfig
 from minisgl.utils import cached_load_hf_config, div_ceil, download_hf_weight
 from tqdm import tqdm
 
@@ -40,15 +40,20 @@ def _interleave_to_half_rows(value: torch.Tensor, head_dim: int) -> torch.Tensor
     odd = value[:, 1::2, ...]
     return torch.cat((even, odd), dim=1).reshape(original_shape)
 
+
 def _needs_llama4_qk_reorder(key: str, value: torch.Tensor, model_config: ModelConfig) -> bool:
-    is_llama4 = (model_config.architectures is not None and "Llama4ForConditionalGeneration" in model_config.architectures) or (
-        model_config.model_type in {"llama4", "llama4_text"}
-    )
+    is_llama4 = (
+        model_config.architectures is not None
+        and "Llama4ForConditionalGeneration" in model_config.architectures
+    ) or (model_config.model_type in {"llama4", "llama4_text"})
     if not is_llama4 or value.ndim != 2:
         return False
     return ".self_attn.q_proj.weight" in key or ".self_attn.k_proj.weight" in key
 
-def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, config: ModelConfig) -> torch.Tensor:
+
+def _shard_tensor(
+    key: str, value: torch.Tensor, r: int, n: int, config: ModelConfig
+) -> torch.Tensor:
     """Extract rank r's shard from a single tensor. Returns a contiguous copy."""
     if _needs_llama4_qk_reorder(key, value, config):
         value = _interleave_to_half_rows(value, config.head_dim)
@@ -96,6 +101,7 @@ def _get_expert_stack_info(key: str) -> tuple[str, int] | None:
     if packed_name.endswith(".weight"):
         packed_name = packed_name.removesuffix(".weight")
     return f"{match.group('prefix')}.{packed_name}", int(match.group("idx"))
+
 
 def load_weight(
     model_path: str,

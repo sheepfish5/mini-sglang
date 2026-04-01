@@ -6,7 +6,12 @@ from .base import BaseOP
 
 
 class RMSNorm(BaseOP):
-    def __init__(self, size: int, eps: float, has_weight: bool = True,) -> None:
+    def __init__(
+        self,
+        size: int,
+        eps: float,
+        has_weight: bool = True,
+    ) -> None:
         from flashinfer import rmsnorm
 
         self.has_weight = has_weight

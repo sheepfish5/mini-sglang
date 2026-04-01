@@ -24,7 +24,9 @@ if TYPE_CHECKING:
 
 class GatedMLP(BaseOP):
     def __init__(self, config: ModelConfig, intermediate_size: int | None = None):
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = (
+            intermediate_size if intermediate_size is not None else config.intermediate_size
+        )
         self.gate_up_proj = LinearColParallelMerged(
             config.hidden_size,
             [self.intermediate_size, self.intermediate_size],
