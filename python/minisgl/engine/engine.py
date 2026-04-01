@@ -143,7 +143,15 @@ class Engine:
                 for k, v in self.model.state_dict().items()
             }
         else:
-            return {k: v.to(self.dtype) for k, v in load_weight(config.model_path, self.device)}
+            return {
+                k: v.to(self.dtype)
+                for k, v in load_weight(
+                    config.model_path,
+                    self.device,
+                    architectures=tuple(config.model_config.architectures),
+                    model_type=config.model_config.model_type,
+                )
+            }
 
     def _determine_num_pages(self, old_free_memory: int, config: EngineConfig) -> int:
         new_free_memory = self._sync_get_memory()[1]

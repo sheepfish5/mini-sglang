@@ -31,8 +31,25 @@ _SLOT_NAMES = {
 _EXPERT_PATTERN = re.compile(r"^(?P<prefix>.+\.experts)\.(?P<idx>\d+)\.(?P<name>.+)$")
 
 
-def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, num_kv_heads: int):
+def _interleave_to_half_rows(value: torch.Tensor, head_dim: int) -> torch.Tensor:
+    original_shape = value.shape
+    num_heads = value.shape[0] // head_dim
+    value = value.view(num_heads, head_dim, *value.shape[1:])
+    even = value[:, ::2, ...]
+    odd = value[:, 1::2, ...]
+    return torch.cat((even, odd), dim=1).reshape(original_shape)
+
+def _needs_llama4_qk_reorder(key: str, is_llama4: bool, value: torch.Tensor) -> bool:
+    if not is_llama4 or value.ndim != 2:
+        return False
+    return ".self_attn.q_proj.weight" in key or ".self_attn.k_proj.weight" in key
+
+def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, num_kv_heads: int, is_llama4: bool = False) -> torch.Tensor:
     """Extract rank r's shard from a single tensor. Returns a contiguous copy."""
+    if _needs_llama4_qk_reorder(key, is_llama4, value):
+        head_dim = 128
+        value = _interleave_to_half_rows(value, head_dim)
+
     if any(key.count(sub) for sub in _SPLIT_DIM_0):
         is_kv_proj = any(key.count(sub) for sub in (".k_proj", ".v_proj"))
         if is_kv_proj and num_kv_heads is not None and num_kv_heads < n:
@@ -77,11 +94,18 @@ def _get_expert_stack_info(key: str) -> tuple[str, int] | None:
         packed_name = packed_name.removesuffix(".weight")
     return f"{match.group('prefix')}.{packed_name}", int(match.group("idx"))
 
-
-def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, torch.Tensor]]:
+def load_weight(
+    model_path: str,
+    device: torch.device,
+    architectures: tuple[str, ...] | None = None,
+    model_type: str | None = None,
+) -> Iterator[Tuple[str, torch.Tensor]]:
     """Streaming weight loader. Yields (name, tensor) pairs already sharded, merged,
     and on device. Peak CPU memory: one full tensor + a small merge buffer."""
     from .config import ModelConfig
+    is_llama4 = (architectures is not None and "Llama4ForConditionalGeneration" in architectures) or (
+        model_type in {"llama4", "llama4_text"}
+    )
 
     model_folder = download_hf_weight(model_path)
     config = ModelConfig.from_hf(cached_load_hf_config(model_path))
@@ -99,8 +123,7 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
                 if name.startswith(("vision_model.", "multi_modal_projector.")):
                     continue
                 raw = f.get_tensor(name)
-                name = name.removeprefix("language_model.")
-                tensor = _shard_tensor(name, raw, tp_info.rank, tp_info.size, config.num_kv_heads)
+                tensor = _shard_tensor(name, raw, tp_info.rank, tp_info.size, config.num_kv_heads, is_llama4=is_llama4).to(device)
                 del raw
 
                 if (info := _get_merge_info(name)) is None:
