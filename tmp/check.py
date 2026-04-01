@@ -1,92 +1,234 @@
 import torch
+from pathlib import Path
 
-sl0ba = torch.load("sglang_l0_before_attn_hidden_states.pt")
-l0ba = torch.load("l0_before_attn_hidden_states.pt")
 
-l0ba_s = torch.sum(l0ba, dim=1)
-sl0ba_s = torch.sum(sl0ba, dim=1)
-print("l0ba_s:", l0ba_s)
-print("sl0ba_s:", sl0ba_s)
+NUM_Q_HEADS = 10
+NUM_KV_HEADS = 2
+HEAD_DIM = 128
+BASE_DIR = Path(__file__).resolve().parent
 
-l0aaqkv = torch.load("l0_attn_after_qkv_proj.pt").float()
-l0aaattn = torch.load("l0_attn_after_attention.pt").float()
-sl0aaqkv = torch.load("sglang_l0_attn_after_qkv_proj.pt").float()
-sl0aaattn = torch.load("sglang_l0_attn_after_attention.pt").float()
 
-l0aaqkv_s = torch.sum(l0aaqkv, dim=1)
-l0aaattn_s = torch.sum(l0aaattn, dim=1)
-sl0aaqkv_s = torch.sum(sl0aaqkv, dim=1)
-sl0aaattn_s = torch.sum(sl0aaattn, dim=1)
+def load(name: str):
+    path = BASE_DIR / name
+    if not path.exists():
+        path = BASE_DIR / "attn_debug" / name
+    return torch.load(path, map_location="cpu")
 
-print("l0aaqkv_s: ", l0aaqkv_s)
-print("sl0aaqkv_s: ", sl0aaqkv_s)
-print("l0aaattn_s: ", l0aaattn_s)
-print("sl0aaattn_s: ", sl0aaattn_s)
 
-l0arq = torch.load("l0_after_rope_q.pt").float()
-l0ark = torch.load("l0_after_rope_k.pt").float()
-l0arv = torch.load("l0_after_rope_v.pt").float()
-sl0arq = torch.load("sglang_l0_after_rope_q.pt").float()
-sl0ark = torch.load("sglang_l0_after_rope_k.pt").float()
-sl0arv = torch.load("sglang_l0_after_rope_v.pt").float()
+def flatten_last_two(x: torch.Tensor) -> torch.Tensor:
+    if x.ndim >= 3:
+        return x.reshape(*x.shape[:-2], x.shape[-2] * x.shape[-1])
+    return x
 
-l0arq_s = torch.sum(l0arq, dim=1)
-l0ark_s = torch.sum(l0ark, dim=1)
-l0arv_s = torch.sum(l0arv, dim=1)
-sl0arq_s = torch.sum(sl0arq, dim=1)
-sl0ark_s = torch.sum(sl0ark, dim=1)
-sl0arv_s = torch.sum(sl0arv, dim=1)
-print("l0arq_s: ", l0arq_s)
-print("sl0arq_s: ", sl0arq_s)
-print("l0ark_s: ", l0ark_s)
-print("sl0ark_s: ", sl0ark_s)
-print("l0arv_s: ", l0arv_s)
-print("sl0arv_s: ", sl0arv_s)
 
-l0aqq = torch.load("l0_after_qknorm_q.pt").float()
-l0aqk = torch.load("l0_after_qknorm_k.pt").float()
-l0aqv = torch.load("l0_after_qknorm_v.pt").float()
-sl0aqq = torch.load("sglang_l0_after_qknorm_q.pt").float()
-sl0aqk = torch.load("sglang_l0_after_qknorm_k.pt").float()
-sl0aqv = torch.load("sglang_l0_after_qknorm_v.pt").float()
+def maybe_strip_leading_bos(mini: torch.Tensor, sglang: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, bool]:
+    if mini.ndim == 0 or sglang.ndim == 0:
+        return mini, sglang, False
+    if mini.shape[0] == sglang.shape[0] + 1:
+        return mini[1:], sglang, True
+    return mini, sglang, False
 
-l0aqq_s = torch.sum(l0aqq, dim=1)
-l0aqk_s = torch.sum(l0aqk, dim=1)
-l0aqv_s = torch.sum(l0aqv, dim=1)
-sl0aqq_s = torch.sum(sl0aqq, dim=1)
-sl0aqk_s = torch.sum(sl0aqk, dim=1)
-sl0aqv_s = torch.sum(sl0aqv, dim=1)
-print("l0aqq_s: ", l0aqq_s)
-print("sl0aqq_s: ", sl0aqq_s)
-print("l0aqk_s: ", l0aqk_s)
-print("sl0aqk_s: ", sl0aqk_s)
-print("l0aqv_s: ", l0aqv_s)
-print("sl0aqv_s: ", sl0aqv_s)
 
-l0babq = torch.load("l0_before_attn_backend_q.pt").float()
-l0babk = torch.load("l0_before_attn_backend_k.pt").float()
-l0babv = torch.load("l0_before_attn_backend_v.pt").float()
-sl0babq = torch.load("sglang_l0_before_attn_backend_q.pt").float()
-sl0babk = torch.load("sglang_l0_before_attn_backend_k.pt").float()
-sl0babv = torch.load("sglang_l0_before_attn_backend_v.pt").float()
+def report_diff(name: str, mini: torch.Tensor, sglang: torch.Tensor):
+    mini = mini.float()
+    sglang = sglang.float()
+    if mini.shape != sglang.shape:
+        print(f"{name}: shape mismatch {tuple(mini.shape)} vs {tuple(sglang.shape)}")
+        return
+    diff = (mini - sglang).abs()
+    print(
+        f"{name}: shape={tuple(mini.shape)}, "
+        f"max_abs_diff={diff.max().item():.6g}, "
+        f"mean_abs_diff={diff.mean().item():.6g}"
+    )
 
-l0babq_s = torch.sum(l0babq.view(13, 1280), dim=1)
-l0babk_s = torch.sum(l0babk, dim=1)
-l0babv_s = torch.sum(l0babv, dim=1)
-sl0babq_s = torch.sum(sl0babq, dim=1)
-sl0babk_s = torch.sum(sl0babk, dim=1)
-sl0babv_s = torch.sum(sl0babv, dim=1)
-print("l0babq_s: ", l0babq_s)
-print("sl0babq_s: ", sl0babq_s)
-print("l0babk_s: ", l0babk_s)
-print("sl0babk_s: ", sl0babk_s)
-print("l0babv_s: ", l0babv_s)
-print("sl0babv_s: ", sl0babv_s)
 
-l0aa = torch.load("l0_after_attn_hidden_states.pt")
-sl0aa = torch.load("sglang_l0_after_attn_hidden_states.pt")
-l0aa_s = torch.sum(l0aa, dim=1)
-sl0aa_s = torch.sum(sl0aa, dim=1)
+def report_head_diff(name: str, mini: torch.Tensor, sglang: torch.Tensor, num_heads: int):
+    mini = flatten_last_two(mini).float().view(-1, num_heads, HEAD_DIM)
+    sglang = flatten_last_two(sglang).float().view(-1, num_heads, HEAD_DIM)
+    diff = (mini - sglang).abs().amax(dim=(0, 2))
+    print(f"{name}_head_diff=={diff}")
 
-print("l0aa_s:", l0aa_s)
-print("sl0aa_s:", sl0aa_s)
+
+def compare_pair(
+    label: str,
+    mini_name: str,
+    sglang_name: str,
+    num_heads: int | None = None,
+    flatten: bool = False,
+):
+    mini = load(mini_name)
+    sglang = load(sglang_name)
+
+    if flatten:
+        mini = flatten_last_two(mini)
+        sglang = flatten_last_two(sglang)
+
+    mini, sglang, stripped = maybe_strip_leading_bos(mini, sglang)
+    if stripped:
+        print(f"{label}: stripped leading BOS row from mini before comparison")
+
+    report_diff(label, mini, sglang)
+    if num_heads is not None:
+        report_head_diff(label, mini, sglang, num_heads)
+
+
+def main():
+    compare_pair(
+        "l0_before_attn_hidden_states",
+        "l0_before_attn_hidden_states.pt",
+        "sglang_l0_before_attn_hidden_states.pt",
+    )
+    compare_pair(
+        "l0_attn_after_qkv_proj",
+        "l0_attn_after_qkv_proj.pt",
+        "sglang_l0_attn_after_qkv_proj.pt",
+    )
+    compare_pair(
+        "l0_after_rope_q",
+        "l0_after_rope_q.pt",
+        "sglang_l0_after_rope_q.pt",
+        num_heads=NUM_Q_HEADS,
+    )
+    compare_pair(
+        "l0_after_rope_k",
+        "l0_after_rope_k.pt",
+        "sglang_l0_after_rope_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_after_rope_v",
+        "l0_after_rope_v.pt",
+        "sglang_l0_after_rope_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_after_qknorm_q",
+        "l0_after_qknorm_q.pt",
+        "sglang_l0_after_qknorm_q.pt",
+        num_heads=NUM_Q_HEADS,
+    )
+    compare_pair(
+        "l0_after_qknorm_k",
+        "l0_after_qknorm_k.pt",
+        "sglang_l0_after_qknorm_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_after_qknorm_v",
+        "l0_after_qknorm_v.pt",
+        "sglang_l0_after_qknorm_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_before_attn_backend_q",
+        "l0_before_attn_backend_q.pt",
+        "sglang_l0_before_attn_backend_q.pt",
+        num_heads=NUM_Q_HEADS,
+        flatten=True,
+    )
+    compare_pair(
+        "l0_before_attn_backend_k",
+        "l0_before_attn_backend_k.pt",
+        "sglang_l0_before_attn_backend_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_before_attn_backend_v",
+        "l0_before_attn_backend_v.pt",
+        "sglang_l0_before_attn_backend_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l0_after_attn_backend_attn_output",
+        "l0_after_attn_backend_attn_output.pt",
+        "sglang_l0_after_attn_backend_attn_output.pt",
+        num_heads=NUM_Q_HEADS,
+        flatten=True,
+    )
+    compare_pair(
+        "l0_after_attn_hidden_states",
+        "l0_after_attn_hidden_states.pt",
+        "sglang_l0_after_attn_hidden_states.pt",
+    )
+
+    compare_pair(
+        "l1_before_attn_hidden_states",
+        "l1_before_attn_hidden_states.pt",
+        "sglang_l1_before_attn_hidden_states.pt",
+    )
+    compare_pair(
+        "l1_attn_after_qkv_proj",
+        "l1_attn_after_qkv_proj.pt",
+        "sglang_l1_attn_after_qkv_proj.pt",
+    )
+    compare_pair(
+        "l1_after_rope_q",
+        "l1_after_rope_q.pt",
+        "sglang_l1_after_rope_q.pt",
+        num_heads=NUM_Q_HEADS,
+    )
+    compare_pair(
+        "l1_after_rope_k",
+        "l1_after_rope_k.pt",
+        "sglang_l1_after_rope_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_after_rope_v",
+        "l1_after_rope_v.pt",
+        "sglang_l1_after_rope_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_after_qknorm_q",
+        "l1_after_qknorm_q.pt",
+        "sglang_l1_after_qknorm_q.pt",
+        num_heads=NUM_Q_HEADS,
+    )
+    compare_pair(
+        "l1_after_qknorm_k",
+        "l1_after_qknorm_k.pt",
+        "sglang_l1_after_qknorm_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_after_qknorm_v",
+        "l1_after_qknorm_v.pt",
+        "sglang_l1_after_qknorm_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_before_attn_backend_q",
+        "l1_before_attn_backend_q.pt",
+        "sglang_l1_before_attn_backend_q.pt",
+        num_heads=NUM_Q_HEADS,
+        flatten=True,
+    )
+    compare_pair(
+        "l1_before_attn_backend_k",
+        "l1_before_attn_backend_k.pt",
+        "sglang_l1_before_attn_backend_k.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_before_attn_backend_v",
+        "l1_before_attn_backend_v.pt",
+        "sglang_l1_before_attn_backend_v.pt",
+        num_heads=NUM_KV_HEADS,
+    )
+    compare_pair(
+        "l1_attn_after_attention",
+        "l1_attn_after_attention.pt",
+        "sglang_l1_attn_after_attention.pt",
+        flatten=True,
+    )
+    compare_pair(
+        "l1_after_attn_hidden_states",
+        "l1_after_attn_hidden_states.pt",
+        "sglang_l1_after_attn_hidden_states.pt",
+    )
+
+
+if __name__ == "__main__":
+    main()

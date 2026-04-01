@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import math
+import os
 from typing import Any, Callable, Dict, Tuple
 
 import torch
@@ -20,6 +21,8 @@ class RotaryEmbedding(StateLessOP):
     ) -> None:
         super().__init__()
         self.head_size = head_size
+        self.rotary_dim = rotary_dim
+        self.is_neox_style = True
         assert rotary_dim == head_size
         inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2, dtype=torch.float) / rotary_dim))
         if post_process is not None:
@@ -36,19 +39,67 @@ class RotaryEmbedding(StateLessOP):
 
         self.apply_rope_with_cos_sin_cache_inplace = apply_rope_with_cos_sin_cache_inplace
 
+    def forward_native(
+        self,
+        positions: torch.Tensor,
+        query: torch.Tensor,
+        key: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        positions = positions.flatten().long()
+        cos_sin = self._cos_sin_cache.index_select(0, positions)
+        cos, sin = cos_sin.chunk(2, dim=-1)
+
+        def apply(x: torch.Tensor) -> torch.Tensor:
+            x_shape = x.shape
+            x = x.view(x.shape[0], -1, self.head_size)
+            x_rot = x[..., : self.rotary_dim]
+            x_pass = x[..., self.rotary_dim :]
+            cos_ = cos.unsqueeze(-2).to(x.dtype)
+            sin_ = sin.unsqueeze(-2).to(x.dtype)
+            x1, x2 = torch.chunk(x_rot, 2, dim=-1)
+            o1 = x1 * cos_ - x2 * sin_
+            o2 = x2 * cos_ + x1 * sin_
+            return torch.cat((torch.cat((o1, o2), dim=-1), x_pass), dim=-1).reshape(x_shape)
+
+        return apply(query), apply(key)
+
     def forward(
         self,
         positions: torch.Tensor,
         query: torch.Tensor,
         key: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if os.getenv("MINISGL_ROPE_FORCE_CONTIGUOUS") == "1":
+            query = query.contiguous()
+            key = key.contiguous()
+
+        if os.getenv("MINISGL_DEBUG_ROPE_REF") == "1":
+            query_ref, key_ref = self.forward_native(
+                positions,
+                query.detach().clone().float(),
+                key.detach().clone().float(),
+            )
+
         self.apply_rope_with_cos_sin_cache_inplace(
             positions=positions,
             query=query,
             key=key,
             head_size=self.head_size,
             cos_sin_cache=self._cos_sin_cache,
+            is_neox=self.is_neox_style,
         )
+
+        if os.getenv("MINISGL_DEBUG_ROPE_REF") == "1":
+            q_diff = (query.float() - query_ref).abs()
+            k_diff = (key.float() - key_ref).abs()
+            print(
+                "[RotaryEmbedding.forward] "
+                f"q_max_abs_diff={q_diff.max().item():.6g}, "
+                f"k_max_abs_diff={k_diff.max().item():.6g}, "
+                f"q_dtype={query.dtype}, k_dtype={key.dtype}, "
+                f"q_stride={query.stride()}, k_stride={key.stride()}, "
+                f"q_contiguous={query.is_contiguous()}, k_contiguous={key.is_contiguous()}"
+            )
         return query, key
 
 

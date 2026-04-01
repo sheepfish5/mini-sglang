@@ -135,7 +135,7 @@ class RadixPrefixCache(BasePrefixCache):
 
     def insert_prefix(self, input_ids: torch.Tensor, indices: torch.Tensor) -> InsertResult:
         insert_len = align_down(len(input_ids), self.page_size)
-        input_ids, indices = input_ids[:insert_len], indices[:insert_len]
+        input_ids, indices = input_ids[:insert_len], indices[:insert_len]  # 唯一一处需要担心会把 input_ids 截断的地方是这里。
         node, prefix_len = self._tree_walk(input_ids)
         if prefix_len != insert_len:  # NOTE: prefix_len < insert_len
             new_node = RadixTreeNode(self.key_fn)
